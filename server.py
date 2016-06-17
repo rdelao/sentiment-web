@@ -1,8 +1,7 @@
 from flask import Flask, render_template, request, jsonify, make_response
 from info import classify2
 from math import e
-from redis import Redis
-from config import STATS_KEY, HOST, RHOST, RPASS, RPORT
+from config import HOST
 from cors import crossdomain
 from datetime import datetime
 import json
@@ -10,7 +9,6 @@ import json
 app = Flask(__name__)
 app.debug = False
 app.config['MAX_CONTENT_LENGTH'] = (1 << 20) # 1 MB max request size
-conn = Redis(RHOST, RPORT, password=RPASS)
 
 def percentage_confidence(conf):
 	return 100.0 * e ** conf / (1 + e**conf)
@@ -29,7 +27,6 @@ def get_sentiment_info(text):
 
 @app.route('/')
 def home():
-	conn.incr(STATS_KEY + "_hits")
 	return render_template("index.html")
 
 @app.route('/api/text/', methods=["POST"])
@@ -38,8 +35,6 @@ def read_api():
 	text = request.form.get("txt")
 	sentiment, confidence = get_sentiment_info(text)
 	result = {"sentiment": sentiment, "confidence": confidence}
-	conn.incr(STATS_KEY + "_api_calls")
-	conn.incr(STATS_KEY + today())
 	return jsonify(result=result)
 
 @app.route('/web/text/', methods=["POST"])
@@ -47,8 +42,6 @@ def read_api():
 def evaldata():
 	text = request.form.get("txt")
 	result, confidence = get_sentiment_info(text)
-	conn.incr(STATS_KEY + "_web_calls")
-	conn.incr(STATS_KEY + today())
 	return jsonify(result=result, confidence=confidence, sentence=text)
 
 @app.route('/api/batch/', methods=["POST"])
@@ -61,9 +54,6 @@ def batch_handler():
 	for req in json_data:
 		sent, conf = get_sentiment_info(req)
 		result.append({"result": sent, "confidence": conf})
-
-	conn.incrby(STATS_KEY + "_api_calls", len(json_data))
-	conn.incrby(STATS_KEY + today(), len(json_data))
 	resp = make_response(json.dumps(result))
 	resp.mimetype = 'application/json'
 
